@@ -1,0 +1,200 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Mini Wordle</title>
+  <style>
+    :root { font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif; }
+    body { margin: 0; padding: 24px; display: grid; place-items: center; background: #0f172a; color: #e2e8f0; }
+    .app { width: min(420px, 92vw); display: grid; gap: 14px; }
+    h1 { margin: 0; font-size: 22px; letter-spacing: .5px; }
+    .sub { opacity: .8; font-size: 13px; }
+
+    .board { display: grid; gap: 8px; margin-top: 8px; }
+    .row { display: grid; grid-template-columns: repeat(5, 1fr); gap: 8px; }
+    .tile {
+      height: 58px; display: grid; place-items: center;
+      border: 2px solid #334155; border-radius: 10px;
+      font-weight: 800; font-size: 22px; text-transform: uppercase;
+      background: rgba(255,255,255,0.02);
+      user-select: none;
+    }
+    .tile.filled { border-color: #64748b; }
+    .tile.flip { animation: flip .45s ease; }
+    @keyframes flip { 0%{transform: rotateX(0)} 50%{transform: rotateX(90deg)} 100%{transform: rotateX(0)} }
+
+    .tile.correct { background: #16a34a; border-color: #16a34a; color: white; }
+    .tile.present { background: #ca8a04; border-color: #ca8a04; color: white; }
+    .tile.absent  { background: #334155; border-color: #334155; color: #e2e8f0; }
+
+    .controls { display: grid; gap: 8px; grid-template-columns: 1fr auto; }
+    input {
+      padding: 12px 12px; border-radius: 10px; border: 2px solid #334155;
+      background: #0b1223; color: #e2e8f0; font-size: 16px; outline: none;
+      text-transform: uppercase;
+    }
+    input:focus { border-color: #60a5fa; }
+    button {
+      padding: 12px 14px; border-radius: 10px; border: none;
+      background: #2563eb; color: white; font-weight: 700; cursor: pointer;
+    }
+    button:disabled { opacity: .5; cursor: not-allowed; }
+    .msg { min-height: 22px; font-size: 14px; }
+    .bar { display:flex; gap:8px; flex-wrap: wrap; opacity:.85; font-size: 12px; }
+    .pill { padding: 6px 10px; border-radius: 999px; background: rgba(255,255,255,0.06); border: 1px solid #334155; }
+    .hint { opacity:.7; font-size: 12px; margin-top: 2px; }
+    a { color: #93c5fd; text-decoration: none; }
+  </style>
+</head>
+<body>
+  <div class="app">
+    <div>
+      <h1>Mini Wordle</h1>
+      <div class="sub">Guess the 5-letter word in 6 tries. Type a word → Enter.</div>
+    </div>
+
+    <div id="board" class="board" aria-label="Wordle board"></div>
+
+    <div class="controls">
+      <input id="guess" maxlength="5" inputmode="text" autocomplete="off" spellcheck="false" placeholder="TYPE GUESS" />
+      <button id="submit">Enter</button>
+    </div>
+
+    <div id="msg" class="msg"></div>
+
+    <div class="bar">
+      <div class="pill">✅ Green = right spot</div>
+      <div class="pill">🟨 Yellow = wrong spot</div>
+      <div class="pill">⬛ Gray = not in word</div>
+    </div>
+
+    <div class="hint">Want it on a real link later? We can turn on GitHub Pages 😄</div>
+  </div>
+
+  <script>
+    // ---- Settings ----
+    const WORDS = ["crane","slate","brave","shine","plant","stone","water","house","train","light"];
+    const SECRET = WORDS[Math.floor(Math.random() * WORDS.length)];
+    const MAX_TRIES = 6;
+    const WORD_LEN = 5;
+
+    // ---- State ----
+    let row = 0;
+    let gameOver = false;
+
+    const boardEl = document.getElementById("board");
+    const inputEl = document.getElementById("guess");
+    const msgEl = document.getElementById("msg");
+    const btnEl = document.getElementById("submit");
+
+    // Build board
+    const tiles = [];
+    for (let r = 0; r < MAX_TRIES; r++) {
+      const rowEl = document.createElement("div");
+      rowEl.className = "row";
+      const rowTiles = [];
+      for (let c = 0; c < WORD_LEN; c++) {
+        const t = document.createElement("div");
+        t.className = "tile";
+        t.textContent = "";
+        rowEl.appendChild(t);
+        rowTiles.push(t);
+      }
+      boardEl.appendChild(rowEl);
+      tiles.push(rowTiles);
+    }
+
+    function setMessage(text) {
+      msgEl.textContent = text;
+    }
+
+    function normalizeGuess(g) {
+      return (g || "").trim().toLowerCase();
+    }
+
+    // Wordle-style scoring with duplicate handling
+    function scoreGuess(guess, secret) {
+      const result = Array(WORD_LEN).fill("absent");
+      const secretArr = secret.split("");
+      const guessArr = guess.split("");
+
+      // Pass 1: correct
+      for (let i = 0; i < WORD_LEN; i++) {
+        if (guessArr[i] === secretArr[i]) {
+          result[i] = "correct";
+          secretArr[i] = null; // consume
+          guessArr[i] = null;  // consume
+        }
+      }
+      // Pass 2: present
+      for (let i = 0; i < WORD_LEN; i++) {
+        if (!guessArr[i]) continue;
+        const idx = secretArr.indexOf(guessArr[i]);
+        if (idx !== -1) {
+          result[i] = "present";
+          secretArr[idx] = null; // consume one occurrence
+        }
+      }
+      return result;
+    }
+
+    function paintRow(r, guess, result) {
+      for (let c = 0; c < WORD_LEN; c++) {
+        const tile = tiles[r][c];
+        tile.textContent = guess[c].toUpperCase();
+        tile.classList.add("filled");
+      }
+
+      // Flip animation stagger
+      result.forEach((state, c) => {
+        const tile = tiles[r][c];
+        setTimeout(() => {
+          tile.classList.add("flip");
+          tile.classList.add(state);
+        }, c * 120);
+      });
+    }
+
+    function endGame(win) {
+      gameOver = true;
+      btnEl.disabled = true;
+      inputEl.disabled = true;
+      if (win) setMessage("🎉 You got it!");
+      else setMessage(`😅 Out of tries. The word was ${SECRET.toUpperCase()}.`);
+    }
+
+    function handleSubmit() {
+      if (gameOver) return;
+
+      const guess = normalizeGuess(inputEl.value);
+      if (guess.length !== WORD_LEN) return setMessage("Type a 5-letter word.");
+      if (!/^[a-z]{5}$/.test(guess)) return setMessage("Letters only 😄");
+      if (!WORDS.includes(guess)) return setMessage("Not in my tiny word list (for now).");
+
+      setMessage("");
+      const result = scoreGuess(guess, SECRET);
+      paintRow(row, guess, result);
+
+      if (guess === SECRET) return setTimeout(() => endGame(true), 700);
+      row++;
+      inputEl.value = "";
+      inputEl.focus();
+
+      if (row >= MAX_TRIES) return setTimeout(() => endGame(false), 700);
+    }
+
+    // Enter key
+    inputEl.addEventListener("keydown", (e) => {
+      if (e.key === "Enter") handleSubmit();
+    });
+    btnEl.addEventListener("click", handleSubmit);
+
+    // Auto-focus
+    inputEl.focus();
+
+    // Tiny dev hint (remove if you want)
+    // console.log("Secret word:", SECRET);
+  </script>
+</body>
+</html>
