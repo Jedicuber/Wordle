@@ -74,7 +74,13 @@
 
   <script>
     // ---- Settings ----
-    const WORDS = ["crane","slate","brave","shine","plant","stone","water","house","train","light"];
+  const WORDS = [
+  "crane","slate","brave","shine","plant","stone","water","house","train","light",
+  "audio","candy","beach","score","cloud","grape","spice","chess","movie","laugh",
+  "tiger","zebra","piano","ghost","smart","cubic","clean","short","pride","flame",
+  "sword","arrow","robot","space","pixel","level","match","storm","fresh","witty"
+];
+
     const SECRET = WORDS[Math.floor(Math.random() * WORDS.length)];
     const MAX_TRIES = 6;
     const WORD_LEN = 5;
@@ -170,7 +176,7 @@
       const guess = normalizeGuess(inputEl.value);
       if (guess.length !== WORD_LEN) return setMessage("Type a 5-letter word.");
       if (!/^[a-z]{5}$/.test(guess)) return setMessage("Letters only 😄");
-      if (!WORDS.includes(guess)) return setMessage("Not in my tiny word list (for now).");
+      // Allow any 5-letter guess (no dictionary check)
 
       setMessage("");
       const result = scoreGuess(guess, SECRET);
